@@ -27,11 +27,11 @@ design choices. We ask **which component actually carries the personalisation**:
 
 | | Finding |
 |---|---|
-| **Exp. 1: Reproduction** | Within 0.4–1.6 pp of the paper on PersonalLLM and 0.8–2.2 pp on Reddit TL;DR. On PersonalLLM, unseen users are *not* more accurate than seen ones. On Reddit, 100→150 seen examples gives no gain. Our frozen Skywork reference on Reddit is much stronger than the paper reports. |
-| **Exp. 2: Function class** | The linear basis is essentially sufficient. Odd MLPs add ≤ 0.6 pp on PersonalLLM and lose 1–3 pp on Reddit, where every basis memorises its training set. A *random* 512-d projection matches PCA-512. Anchoring on the pre-trained reward head gives the best seen-user accuracy. |
+| **Reproduction** | Within 0.4–1.6 pp of the paper on PersonalLLM and 0.8–2.2 pp on Reddit TL;DR. On PersonalLLM, unseen users are *not* more accurate than seen ones. On Reddit, 100→150 seen examples gives no gain. Our frozen Skywork reference on Reddit is much stronger than the paper reports. |
+| **Exp. 1: Function class** | The linear basis is essentially sufficient. Odd MLPs add ≤ 0.6 pp on PersonalLLM and lose 1–3 pp on Reddit, where every basis memorises its training set. A *random* 512-d projection matches PCA-512. Anchoring on the pre-trained reward head gives the best seen-user accuracy. |
 | **Pitfall 1** | A non-odd network applied to embedding *differences* reaches **100 % accuracy even on pure noise** (orientation shortcut, Prop. 1). Symmetric evaluation (score swapped pairs too) catches it. |
 | **Pitfall 2** | A fixed PCA basis with simplex weights scores **47.8 % (below chance)** on Reddit. Simplex weights can't flip a basis direction (Prop. 2). |
-| **Exp. 3: Initialisation** | The few-shot problem is convex in `w` (Prop. 3), so initialisation only changes the transient. Picking the best-fitting seen user's weights with **zero gradient steps** matches 50 steps of LoRe's adaptation (within 0.1 pp for N ≥ 50) and beats LoRe's random start by +4.5 to +5.8 pp at 0 updates. |
+| **Exp. 2: Initialisation** | The few-shot problem is convex in `w` (Prop. 3), so initialisation only changes the transient. Picking the best-fitting seen user's weights with **zero gradient steps** matches 50 steps of LoRe's adaptation (within 0.1 pp for N ≥ 50) and beats LoRe's random start by +4.5 to +5.8 pp at 0 updates. |
 
 <p align="center"><img src="figures/fig_architecture.png" width="85%"></p>
 <p align="center"><img src="figures/fig_init_curves.png" width="70%"></p>
@@ -49,9 +49,9 @@ lore/                     Python package (clean re-implementation)
   synthetic.py            CPU-only planted low-rank benchmark (tests / demo)
 scripts/
   extract_embeddings.py   step 0: cache embeddings (GPU, ~2–3 h on an A100)
-  run_reproduction.py     Exp. 1
-  run_architecture_ablation.py   Exp. 2 (+ --include-naive to show the shortcut)
-  run_init_ablation.py    Exp. 3
+  run_reproduction.py     reproduction
+  run_architecture_ablation.py   Exp. 1 (+ --include-naive to show the shortcut)
+  run_init_ablation.py    Exp. 2
   make_figures.py         regenerate every figure from results/*.csv (CPU, seconds)
   demo_synthetic.py       CPU demo of the orientation shortcut (~30 s)
 results/                  every number in the report, as CSV (see results/README.md)
@@ -65,7 +65,7 @@ tests/                    pytest suite (CPU, ~15 s)
 ## Quick start
 
 ```bash
-git clone <this repo> && cd lore-personalization-study
+git clone https://github.com/Prathamkogta/Lore_Personalisation_Study.git && cd Lore_Personalisation_Study
 pip install -r requirements.txt
 
 pytest -q                               # 15 tests, CPU

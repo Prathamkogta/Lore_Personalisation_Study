@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Experiment 1: reproduce LoRe (linear basis, K=5) on PersonalLLM and Reddit TL;DR.
+"""Reproduction: reproduce LoRe (linear basis, K=5) on PersonalLLM and Reddit TL;DR.
 
 Examples
 --------

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""Experiment 3: how should a new user's weights be initialised?
+"""Experiment 2: how should a new user's weights be initialised?
 
-Re-uses the PersonalLLM (alpha=0.1) LoRe bases from Experiment 1 (one per seed),
+Re-uses the PersonalLLM (alpha=0.1) LoRe bases from the reproduction (one per seed),
 projects support and query pairs through the frozen basis, and compares five
 initialisations under a budget of 0 / 5 / 20 / 50 Adam updates (lr 0.1).
 

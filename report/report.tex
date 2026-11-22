@@ -22,12 +22,9 @@
 
 \setlist{itemsep=2pt,topsep=3pt}
 \captionsetup{font=small,labelfont=bf}
-\newtheorem{proposition}{Proposition}
-\theoremstyle{remark}
-\newtheorem{remark}{Remark}
 
 % >>> Replace with your repository URL before submitting <<<
-\newcommand{\repourl}{https://github.com/USERNAME/lore-personalization-study}
+\newcommand{\repourl}{https://github.com/Prathamkogta/Lore_Personalisation_Study}
 
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\simplex}{\Delta^{K-1}}
@@ -53,40 +50,77 @@ DA5453 Learning From Human Preference --- Course Project Report\\[4pt]
 Code, results, paper and our presentation slides: \url{\repourl}
 \end{center}
 
+
 \begin{abstract}
-\noindent LoRe personalises reward models by writing every user's reward as a convex combination
-$w_i^\top R_\phi$ of $K$ shared basis rewards, learned as a single linear map on frozen reward-model
-embeddings; a new user is fitted by optimising only $w_i$ on a handful of comparisons. The paper
-argues that this simplicity is what makes LoRe work, but never ablates its own design choices. We
-ask \emph{which part of LoRe actually carries the personalisation}, and attack the question from
-three sides: (i)~we rebuild the full pipeline (embedding extraction to evaluation) and reproduce
-the PersonalLLM and Reddit TL;DR results to within 0.4--2.2 percentage points (pp);
-(ii)~we swap the basis for eight function classes, from a frozen PCA basis with zero trainable
-parameters to odd MLPs with 260k parameters; (iii)~we replace LoRe's random initialisation of a new
-user by population-informed starts. The linear basis turns out to be essentially sufficient:
-nonlinear bases add at most 0.6\pp on the semi-synthetic benchmark and nothing on real users. Our first
-nonlinear attempt reached a spurious 100\% accuracy, which we trace to an \emph{orientation
-shortcut} that any non-odd basis can exploit; we prove when it occurs and give a one-line
-diagnostic. A frozen PCA basis falls \emph{below chance} on Reddit, which follows from the simplex
-constraint on user weights. Finally, because the few-shot problem is convex in $w$, the
-initialisation only changes the transient. Even so, choosing the best-fitting seen user with
-\emph{zero} gradient steps already matches 50 steps of LoRe's adaptation (within 0.1\pp for
-$N\ge 50$ support examples).
+\noindent LoRe models each user's reward as a mixture of a few shared basis reward functions, learned
+as a linear map on frozen reward-model embeddings. A new user is then fitted from a handful of
+comparisons by learning only their mixture weights. We first reproduce LoRe on PersonalLLM and Reddit
+TL;DR, landing within 0.4--2.2 percentage points (pp) of the paper. We then run two experiments. In the
+first, we replace LoRe's linear basis with eight alternatives, from frozen PCA directions to small
+MLPs. The linear basis turns out to be essentially sufficient: richer bases add at most 0.6\pp on the
+semi-synthetic benchmark and nothing on real users. In the second, we start new users from the
+learned seen-user population instead of LoRe's random initialisation. This helps a lot early on: picking
+the best-matching seen user, with no gradient steps at all, already matches 50 steps of LoRe's
+few-shot training.
 \end{abstract}
+
+% ======================================================================
+\section{Background: the ideas behind LoRe}
+\label{sec:background}
+
+\paragraph{Learning a reward from comparisons.} Reward models for RLHF are trained on pairwise
+comparisons: for a prompt $x$, an annotator says that response $y_c$ is better than $y_r$. The
+Bradley--Terry (BT) model \citep{bradley1952rank,christiano2017deep} assumes a scalar reward $r(x,y)$ and
+sets $P(y_c\succ y_r\mid x)=\sigma\big(r(x,y_c)-r(x,y_r)\big)$, so the reward is learned by minimising the
+logistic loss $\ell(z)=\log(1+e^{-z})$ on the reward margin. Standard RLHF fits \emph{one} such reward to
+everyone's comparisons. When annotators genuinely disagree (one prefers short answers, another
+detailed ones), a single reward averages them, and the result represents nobody in particular.
+
+\paragraph{Idea 1: preferences decompose into a few basis rewards.} LoRe's central assumption is
+that people's preferences differ, but not arbitrarily. Most of the variation can be explained by a
+small number of underlying criteria, for example helpfulness, conciseness, formality or safety. LoRe
+therefore learns $K$ \emph{basis} reward functions $R_\phi(x,y)\in\R^K$ that are shared by everybody, and
+writes each user's reward as a weighted combination of them:
+\[
+r_i(x,y)=w_i^\top R_\phi(x,y),\qquad w_i\in\simplex .
+\]
+A user is now just a point $w_i$ on the simplex: a set of $K$ non-negative weights that sum to one,
+which can be read as ``how much this person cares about each criterion''. All users' rewards then
+lie in the same $K$-dimensional space. This is what makes the model \emph{low-rank}.
+
+\paragraph{Idea 2: collaborative ranking.} The same idea powers recommender systems
+\citep{koren2009matrix,park2015preference}. In a Netflix-style user$\times$movie rating matrix,
+people's tastes are correlated, so the matrix is approximately low-rank. It factorises as
+(user factors)$\times$(movie factors), and a new user's ratings can be predicted from a few of their
+ratings, because their factor vector is all that is unknown. LoRe applies this to language models. The
+``items'' are responses, of which there are infinitely many, so instead of storing one factor per item
+it \emph{parameterises} the item factors with a function of the response: $R_\phi(x,y)=A\,e(x,y)$. Here
+$e(x,y)\in\R^{4096}$ is the frozen final-token embedding of a pre-trained reward model and
+$A\in\R^{K\times4096}$ is learned.
+
+\paragraph{Idea 3: share the basis, personalise cheaply.} Because the basis is shared, it can be
+learned from many users at once. A new user then only needs $K$ numbers, which can be estimated from a
+handful of comparisons. With $\Delta=e(x,y_c)-e(x,y_r)$, LoRe trains in two stages:
+\begin{align}
+\text{(1) seen users:}\quad &\min_{A,\;\{w_i\in\simplex\}}\;
+\sum_{i}\frac{1}{|D_i|}\sum_{\Delta\in D_i}\ell\!\left(w_i^\top A\Delta/\tau\right),
+\label{eq:joint}\\
+\text{(2) new user:}\quad &w_\text{new}=\arg\min_{w\in\simplex}\;\sum_{\Delta\in D_\text{new}}\ell\!\left(w^\top A\Delta/\tau\right),\quad A\text{ frozen.}
+\label{eq:fewshot}
+\end{align}
+Stage~(1) learns the basis and the weights of \emph{seen} users jointly, giving each user equal weight.
+Stage~(2) fits an \emph{unseen} user with the basis frozen, so only $K$ parameters are learned.
+
+\paragraph{Implementation details.} Following the official code, the weights are parameterised as
+$w=\mathrm{softmax}(\theta)$ with $\theta$ initialised from $\mathcal{N}(0,I)$, and the margin is divided by
+a temperature $\tau=100$, which the paper does not mention. Both stages use full-batch Adam (learning
+rate 0.5 for stage 1, 0.1 for stage 2). Accuracy is the fraction of held-out pairs on which the
+personalised margin is positive, macro-averaged over users. It is reported separately for \emph{seen}
+users (on new pairs) and \emph{unseen} users (after the few-shot fit).
 
 % ======================================================================
 \section{The question, why it matters, and how we approach it}
 \label{sec:question}
-
-\paragraph{Context.} Standard RLHF fits one Bradley--Terry (BT) reward model to pooled preferences,
-which averages away disagreement between annotators. LoRe \citep{bose2025lore} instead assumes that
-the population's rewards span a low-dimensional space: there are $K$ shared \emph{basis} reward
-functions $R_\phi:\mathcal{X}\times\mathcal{Y}\to\R^K$ and every user $i$ is a point $w_i$ on the
-simplex, with personal reward $p_i=w_i^\top R_\phi$. The basis is learned jointly with the weights of
-\emph{seen} users; an \emph{unseen} user is then fitted by optimising only their $K$ weights on a few
-comparisons. In all of the paper's experiments $R_\phi$ is a single linear map $A\in\R^{K\times 4096}$
-on top of frozen embeddings from a pre-trained reward model. With this LoRe beats the much heavier
-PAL \citep{chen2024pal} and VPL \citep{poddar2024vpl} baselines, especially on unseen users.
 
 \paragraph{The question.} The paper credits LoRe's success to its simplicity, but it only compares
 against \emph{other} methods; it never varies its own ingredients. LoRe makes three separable design
@@ -115,19 +149,18 @@ mixtures of ten reward models. That is very close to LoRe's own model class, so 
 check which conclusions survive on real users.
 
 \paragraph{Approach.} We rebuilt the pipeline from scratch (embedding extraction with the 8B Skywork
-reward model, user splits, training and evaluation) and ran three experiments, each with five seeds:
+reward model, user splits, training and evaluation). We first \textbf{reproduce} LoRe on PersonalLLM
+($\alpha\in\{0.1,0.001\}$) and Reddit TL;DR (100 / 150 examples per seen user), so that later changes
+can be attributed to our interventions (\cref{sec:repro}). We then run two experiments, each with five
+seeds:
 \begin{itemize}
-\item \textbf{Experiment 1: reproduction} of LoRe on PersonalLLM ($\alpha\in\{0.1, 0.001\}$) and Reddit
-TL;DR (100 / 150 examples per seen user). We need this baseline before we can attribute any change to
-an ablation (\cref{sec:repro}).
-\item \textbf{Experiment 2: changing the representation and function class} of the basis while holding the
+\item \textbf{Experiment 1: changing the representation and function class} of the basis while holding the
 optimiser, splits and seeds fixed. We test eight bases, ranging from 0 to 263k trainable parameters (\cref{sec:arch}).
-\item \textbf{Experiment 3: initialising new users} from the seen population (five strategies, four
+\item \textbf{Experiment 2: initialising new users} from the seen population (five strategies, four
 support sizes, four update budgets) (\cref{sec:init}).
 \end{itemize}
-Three short propositions explain the surprises we found along the way: a spurious 100\% accuracy
-(\cref{prop:shortcut}), a below-chance basis (\cref{prop:simplex}) and the convergence of all
-initialisations (\cref{prop:convex}).
+Along the way, our first nonlinear bases reached a spurious 100\% accuracy, which we trace to an
+\emph{orientation shortcut}; \cref{sec:shortcut} describes how we diagnosed and removed it.
 
 \paragraph{Summary of findings.}
 \begin{itemize}
@@ -138,45 +171,13 @@ Reddit, more seen-user data (100$\to$150) gives no gain ($p=0.71$).
 and loses 1--3\pp on Reddit, where every basis (linear included) memorises the training set. A
 \emph{random} 512-d projection matches a PCA one. Anchoring the basis on the pre-trained reward
 direction gives the best seen-user accuracy with fewer parameters.
-\item \textbf{Two pitfalls, both explained by short propositions.} Applying a non-odd network to embedding
-differences produces 100\% ``accuracy'' even on pure-noise embeddings. A fixed basis combined with
-simplex weights can be forced below chance (47.8\% on Reddit).
+\item \textbf{An orientation shortcut.} Applying a non-odd network to embedding differences produces
+100\% ``accuracy'' regardless of the data. Making the basis odd fixes it, and scoring swapped pairs
+detects it.
 \item \textbf{Initialisation changes speed, not destination.} Selecting a seen user's weights by support
 loss gives $+4.5$ to $+5.8$\pp over LoRe's random start at zero updates and $+2.4$ to $+3.2$\pp after
-five. All strategies converge by 50 updates, as convexity predicts.
+five. With enough support examples ($N\ge50$), all strategies converge by 50 updates.
 \end{itemize}
-
-% ======================================================================
-\section{Background: LoRe in one page}
-\label{sec:background}
-
-\paragraph{Bradley--Terry reward learning.} For a prompt $x$ with chosen and rejected responses
-$y_c,y_r$, the BT model sets $P(y_c\succ y_r\mid x)=\sigma(r(x,y_c)-r(x,y_r))$. The reward is fitted by
-minimising the logistic loss $\ell(z)=\log(1+e^{-z})$ over the dataset \citep{bradley1952rank,christiano2017deep}.
-
-\paragraph{Low-rank personalisation.} Collaborative ranking \citep{koren2009matrix,park2015preference}
-models a user$\times$item reward matrix as $P=WR$ with rank $K\ll\min(N,M)$. LoRe transfers this idea to
-LLMs by replacing the impossibly large item matrix $R$ with a parametric basis
-$R_\phi(x,y)=A\,e(x,y)$, where $e$ is the frozen final-token embedding of a reward model
-($D=4096$). Writing $\Delta=e(x,y_c)-e(x,y_r)$, user $i$'s margin is $w_i^\top A\Delta$. The two stages are:
-\begin{align}
-\text{(joint)}\quad &\min_{A,\;\{w_i\in\simplex\}_{i\in\mathcal{U}_\text{seen}}}\;
-\sum_{i}\frac{1}{|D_i|}\sum_{\Delta\in D_i}\ell\!\left(w_i^\top A\Delta/\tau\right),
-\label{eq:joint}\\
-\text{(few-shot)}\quad &w_\text{new}=\arg\min_{w\in\simplex}\;\sum_{\Delta\in D_\text{new}}\ell\!\left(w^\top A\Delta/\tau\right),\quad A\text{ frozen.}
-\label{eq:fewshot}
-\end{align}
-Following the official implementation, the weights are parameterised as $w=\mathrm{softmax}(\theta)$,
-the logits start at $\theta\sim\mathcal{N}(0,I)$, and the margin is divided by a temperature
-$\tau=100$ (which the paper does not mention). Both stages use full-batch Adam, with learning rate
-0.5 for the joint stage and 0.1 for the few-shot stage. The objective in \eqref{eq:joint} gives each user equal weight.
-Accuracy is the fraction of held-out pairs with positive personalised margin, macro-averaged over
-users. It is reported separately for \emph{seen} users (new pairs) and \emph{unseen} users (after
-few-shot fitting).
-
-\paragraph{Baselines in the paper.} PAL \citep{chen2024pal} represents users as ideal points in a learned
-MLP space. VPL \citep{poddar2024vpl} infers a latent user code with a variational encoder. Both use
-about 2.4M parameters on the same embeddings, against LoRe's $4096K+NK$.
 
 % ======================================================================
 \section{Experimental setup}
@@ -203,19 +204,17 @@ about 2.4M parameters on the same embeddings, against LoRe's $4096K+NK$.
 \foreach \a/\b in {in/enc, enc/delta, delta/basis, basis/w, w/out} \draw[->] (\a) -- (\b);
 
 \node[probe, below=0.18cm of delta] (p0) {!};
-\node[note=2.3cm, below=0.06cm of p0] {labels are all 1: a nonlinear basis must be odd (Prop.~1)};
+\node[note=2.3cm, below=0.06cm of p0] {labels are all 1: a nonlinear basis must be odd (Sec.~5.2)};
 \node[probe, below=0.18cm of basis] (p1) {1};
-\node[note=2.3cm, below=0.06cm of p1] {Exp.~2: eight function classes (Sec.~5)};
-\node[probe, below=0.18cm of w] (p2) {2};
-\node[note=2.3cm, below=0.06cm of p2] {simplex weights cannot flip a fixed basis (Prop.~2)};
+\node[note=2.3cm, below=0.06cm of p1] {Exp.~1: eight function classes (Sec.~5)};
 
 \node[stage, below=2.3cm of in.south west, anchor=north west] (s1)
-  {\textbf{Stage 1 (seen users).} Learn the basis $\phi$ and all seen-user weights $w_i$ jointly, Eq.~(1). Exp.~1 reproduces this stage.};
+  {\textbf{Stage 1 (seen users).} Learn the basis $\phi$ and all seen-user weights $w_i$ jointly, Eq.~(1). Our reproduction (Sec.~4) covers this stage.};
 \node[stage, right=0.35cm of s1] (s2)
   {\textbf{Stage 2 (unseen users).} Freeze $\phi$; fit $w_\text{new}$ on $N$ support pairs, Eq.~(2).
-  \tikz[baseline=-0.6ex]\node[probe]{3}; Exp.~3: initialise $w_\text{new}$ from the seen population.};
+  \tikz[baseline=-0.6ex]\node[probe]{2}; Exp.~2: initialise $w_\text{new}$ from the seen population.};
 \end{tikzpicture}
-\caption{The LoRe pipeline as we implemented it, and where each of our probes intervenes. Grey: frozen;
+\caption{The LoRe pipeline as we implemented it, and where each of our experiments intervenes. Grey: frozen;
 orange: learned. Embeddings are extracted once and cached; all experiments then run on cached
 4096-d vectors.}
 \label{fig:schematic}
@@ -225,46 +224,24 @@ orange: learned. Embeddings are extracted once and cached; all experiments then 
 state of \texttt{Skywork-Reward-Llama-3.1-8B-v0.2} \citep{liu2024skywork} for the chat-formatted pair
 [user: $x$, assistant: $y$] on an A100 in bf16. This gives 75{,}216\,+\,8{,}000 vectors for PersonalLLM
 (9{,}402 / 1{,}000 prompts $\times$ 8 responses) and 28{,}280 for Reddit. Batched, right-padded inference
-differs from single-sequence inference by a relative $L_2$ error of $10^{-2}$ (cosine 0.99995). We
-accepted this, since it is far below the effects we study. Because Skywork's scalar reward is
-$a^\top e$ with $a$ its \texttt{score.weight}, the \emph{reference model} is itself a linear function of
-the same embedding. We use $a$ both as the ``frozen Skywork'' baseline and as an anchor in Experiment~2.
+differs from single-sequence inference by a relative $L_2$ error of $10^{-2}$ (cosine 0.99995).
 
 \paragraph{Benchmarks.} \textbf{PersonalLLM} \citep{zollo2024personalllm}: each response is scored by ten
 reward models. A synthetic user is $w\sim\mathrm{Dir}(\alpha\mathbf{1}_{10})$, and for every sampled
-prompt the best and worst of the eight responses under $w$ form the pair. Seen users get 47 prompts
-and unseen users 9; all 1{,}000 test prompts are used for evaluation, so each seen user is scored on
-1{,}000 pairs. \textbf{Reddit TL;DR} \citep{stiennon2020learning}: workers present in both splits are
-shuffled and halved (seen/unseen). Seen workers contribute up to 100 or 150 comparisons and unseen
-workers 50 few-shot comparisons.
+prompt the best and worst of the eight responses under $w$ form the pair. We use 1{,}000 seen and 500
+unseen users. Seen users get 47 training prompts and unseen users 9; all 1{,}000 test prompts are used
+for evaluation, so each user is scored on 1{,}000 pairs. \textbf{Reddit TL;DR} \citep{stiennon2020learning}:
+workers present in both splits are shuffled and halved, giving 20 seen and 19 unseen workers (one
+worker with a single annotation is dropped). Seen workers contribute up to 100 or 150 comparisons and
+unseen workers 50 few-shot comparisons. Evaluation uses up to 300 held-out comparisons per worker
+(10{,}275 in total).
 
-\paragraph{Deviations from the paper} are listed in \cref{tab:deviations}. They are mostly forced by
-compute: one A100 session embeds roughly 100k sequences. We kept every choice that affects
-comparability between \emph{our own} runs identical across experiments.
-
-\begin{table}[t]
-\centering\small
-\caption{Where our setup differs from the paper.}
-\label{tab:deviations}
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{@{}lll@{}}
-\toprule
- & \textbf{Paper} & \textbf{Ours} \\
-\midrule
-Basis rank & $B$ chosen by CV from $\{2,5,\dots,50\}$ & $K=5$ fixed \\
-Runs & 20 random splits & 5 seeds (42--46) \\
-PersonalLLM users & 1{,}000 seen / 1{,}000 unseen & 1{,}000 seen / 500 unseen \\
-PersonalLLM $\alpha$ & $\{0.1, 0.01, 0.001\}$ & $\{0.1, 0.001\}$ \\
-Reddit users & 20 seen / 20 unseen & 20 seen / 19 unseen (one worker has 1 annotation) \\
-Reddit test set & all held-out pairs ($\sim$2{,}000/worker) & $\le$300 pairs/worker (10{,}275 total) \\
-Reddit steps & not stated & 1{,}000 joint / 500 few-shot \\
-PRISM & reported & not reproduced (time) \\
-\bottomrule
-\end{tabular}}
-\end{table}
+\paragraph{Training.} Unless stated otherwise we use $K=5$ basis functions and five seeds (42--46).
+On PersonalLLM, stage~1 runs for 2{,}000 steps and stage~2 for 1{,}000. On Reddit, and for every basis in
+Experiment~1, the step counts are 1{,}000 and 500.
 
 % ======================================================================
-\section{Experiment 1: does LoRe reproduce?}
+\section{Reproducing LoRe}
 \label{sec:repro}
 
 \begin{figure}[t]
@@ -277,8 +254,7 @@ the paper's mean. Error bars are the SD across runs. Dots rather than bars becau
 
 \begin{table}[t]
 \centering\small
-\caption{Reproduction results (mean $\pm$ SD across seeds, \%). ``Ref'' is the frozen Skywork reward,
-which is deterministic.}
+\caption{Reproduction results (mean $\pm$ SD across seeds, \%).}
 \label{tab:repro}
 \begin{tabular}{@{}llcccc@{}}
 \toprule
@@ -286,11 +262,9 @@ Benchmark & Setting & Paper seen & Ours seen & Paper unseen & Ours unseen \\
 \midrule
 PersonalLLM & $\alpha=0.1$   & $96.0\pm0.7$ & $95.63\pm0.20$ & $96.1\pm0.8$ & $94.46\pm0.41$ \\
             & $\alpha=0.001$ & $94.3\pm0.9$ & $93.90\pm0.24$ & $93.3\pm1.0$ & $92.43\pm0.63$ \\
-            & Ref ($\alpha=0.1$) & 82.7 & 83.33 & 83.7 & 80.82 \\
 \midrule
 Reddit TL;DR & $n=100$ & $65.0\pm1.1$ & $64.20\pm0.87$ & $66.2\pm1.2$ & $65.28\pm0.82$ \\
              & $n=150$ & $66.2\pm1.0$ & $64.03\pm0.60$ & $66.7\pm1.1$ & $65.45\pm0.55$ \\
-             & Ref & 56.3 & 63.10 & 57.3 & 61.87 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -298,47 +272,57 @@ Reddit TL;DR & $n=100$ & $65.0\pm1.1$ & $64.20\pm0.87$ & $66.2\pm1.2$ & $65.28\p
 \Cref{fig:repro,tab:repro} compare our numbers with the paper. Every one of our means lies within
 roughly two paper-SDs of the reported value. The ordering of settings is preserved: $\alpha=0.1$ is
 easier than $\alpha=0.001$, and PersonalLLM is far easier than Reddit. We take this as a successful
-reproduction and use it as the baseline for the ablations. Some details nevertheless differ, and
-they matter for interpretation:
+reproduction and use it as the baseline for both experiments. Two details nevertheless differ:
 
 \begin{itemize}
 \item \textbf{Unseen is not better than seen on PersonalLLM.} The paper reports unseen accuracy \emph{at or above}
 seen accuracy at $\alpha=0.1$ (96.1 vs 96.0), although unseen users have only 9 pairs against 47. In
 our runs unseen accuracy is consistently lower ($-1.2$\pp), which is what one would expect. Our
 few-shot fits reach 98.9\% \emph{training} accuracy on the 9 support pairs but 94.5\% on test pairs,
-so the few-shot step overfits. This motivates Experiment~3.
+so the few-shot step overfits. The paper does not report few-shot training accuracy, which would have
+exposed this overfitting. It motivates Experiment~2.
 \item \textbf{More seen-user data does not help on Reddit.} Going from 100 to 150 examples per seen user
 leaves overall accuracy unchanged (64.74\% in both cases; paired $t$-test on seen accuracy $p=0.71$). The
 paper reports $+0.9$\pp. Per-user SDs are 3--10\pp with only 20 users per group, so most
 between-method differences of about 1\pp in the paper's Reddit table are within noise.
-\item \textbf{The frozen reference is much stronger on Reddit than reported.} On our evaluation pairs the
-unpersonalised Skywork reward already scores 63.1 / 61.9\%, against 56.3 / 57.3\% in the paper. Our
-test set is a 300-pair-per-worker subsample, so part of the gap may come from the evaluation set.
-If it holds, however, LoRe's gain over \emph{no personalisation at all} on Reddit is $+1.1$\pp (seen)
-and $+3.5$\pp (unseen), not the roughly $+9$\pp the paper's table suggests.
 \end{itemize}
 
 % ======================================================================
-\section{Experiment 2: changing the representation and the function class}
+\section{Experiment 1: changing the representation and the function class}
 \label{sec:arch}
+
+\paragraph{Motivation.} The paper uses a single linear map as the basis in every experiment, although it
+suggests richer options (an MLP, or fine-tuning the encoder) without testing them. We want to know
+whether the linear choice is a deliberate optimum or simply the first thing that worked, and whether an
+even simpler basis would do.
 
 \paragraph{Design.} We hold everything fixed except the basis $R_\phi$: $K=5$, the same optimiser and
 temperature, the same splits (PersonalLLM $\alpha=0.1$; Reddit $n=150$) and five seeds. Every basis
-takes the 4096-d difference $\Delta$ as input:
-\begin{itemize}
-\item \textbf{Simpler than LoRe.} \emph{PCA-5}: the top-5 principal directions of the seen-user training
-differences, frozen, so only user weights are learned. \emph{PCA-512 + linear} and
-\emph{Random-512 + linear}: a frozen 512-d projection (PCA, or a random orthonormal matrix) followed by
-a learned $512\to5$ map. The comparison between the two projections asks whether the compression has to be data-dependent.
-\item \textbf{LoRe.} \emph{Linear}: $4096\to5$, no bias (paper's Example~1).
-\item \textbf{Richer than LoRe.} \emph{MLP-8} / \emph{MLP-64}: two-layer GELU networks, a version of the
-paper's Example~2. \emph{Residual-16}: the linear basis plus a rank-16 nonlinear residual. All three are
-made odd (\cref{sec:shortcut}).
-\item \textbf{Prior-informed.} \emph{Anchor + residual}: column 0 is the frozen Skywork reward direction $a$
-with coefficient fixed to 1. Four learned directions are kept orthogonal to $a$ and rescaled to
-$\|a\|$, and users mix only those four. The hypothesis behind this basis is that everyone shares the
-reference reward and personalisation is a correction on top of it.
-\end{itemize}
+takes the 4096-d difference $\Delta$ as input. We test:
+\begin{enumerate}[label=\arabic*.]
+\item \textbf{PCA-5}: the top-5 principal directions of the seen-user training differences, frozen.
+Only the user weights are learned, so this tests whether the basis needs to be learned at all.
+\item \textbf{PCA-512 + linear}: a frozen 512-d PCA projection followed by a learned $512\to5$ map.
+\item \textbf{Random-512 + linear}: the same, but with a random orthonormal projection. Comparing it
+with PCA-512 asks whether the compression has to be data-dependent.
+\item \textbf{Linear (LoRe)}: $4096\to5$, no bias; the paper's basis (its Example~1).
+\item \textbf{MLP-8} and \textbf{MLP-64}: two-layer GELU networks with 8 or 64 hidden units, a version of
+the paper's Example~2. Both are made odd (\cref{sec:shortcut}).
+\item \textbf{Residual-16}: the linear basis plus a rank-16 nonlinear residual branch, also made odd.
+\item \textbf{Anchor + residual}: a prior-informed basis. Column 0 is the frozen Skywork reward direction
+$a$ (its \texttt{score.weight}, so Skywork's own reward is $a^\top e$), with coefficient fixed to 1. Four
+learned directions are kept orthogonal to $a$ and rescaled to $\|a\|$, and users mix only those four.
+The hypothesis behind this basis is that everyone shares the reference reward and personalisation is a
+correction on top of it.
+\end{enumerate}
+For reference we also report the frozen Skywork reward on its own, with no personalisation.
+
+\paragraph{What we expect.} The fixed bases (PCA-5, and to a lesser extent the 512-d projections)
+should \emph{underperform} the learned linear basis, because they cannot adapt their directions to what
+users actually disagree about. The MLPs, the residual basis and the anchored basis should \emph{match or
+slightly exceed} the linear basis. However, they have more trainable parameters than LoRe, and we do
+\emph{not} expect a large jump in accuracy. The linear basis already performs well, and the paper's own
+baselines (PAL and VPL, each with about 2.4M parameters) do not beat it despite far greater capacity.
 
 \begin{figure}[t]
 \centering
@@ -377,157 +361,162 @@ Residual-16 (odd) & 86.1k & 100.0 & 95.58\,{\scriptsize$\pm$0.17} & 98.6 & 94.43
 
 \subsection{Results: the linear basis is essentially sufficient}
 
-\Cref{fig:arch,tab:arch} summarise the ablation.
+\Cref{fig:arch,tab:arch} summarise the ablation. The expectations hold, with one surprise on Reddit.
 
-\textbf{Nonlinearity buys little, and nothing on real users.} On PersonalLLM the best nonlinear basis
-(MLP-8) improves unseen accuracy by $+0.61$\pp over linear. The difference is statistically clear
-(Welch $p=0.002$) but practically small, and it costs 1.6$\times$ the parameters; MLP-64 and Residual-16
-are not significantly better ($p\approx0.05$). On Reddit every nonlinear basis is \emph{worse} on
-unseen users ($-0.9$ to $-3.1$\pp), and MLP-8 becomes unstable across seeds (SD 3.6\pp). The training
-columns show why. On Reddit \emph{every} learned basis, linear included, fits the seen users' training
-pairs to 99--100\% but generalises at 60--65\%. Capacity is not the bottleneck; label noise and the
-small number of pairs per user are. Extra capacity can only be spent on memorisation.
+\subsubsection*{Nonlinear bases buy little on PersonalLLM}
+The best nonlinear basis, MLP-8, improves unseen accuracy by $+0.61$\pp over the linear basis (94.63
+vs 94.02). The gain is statistically clear (Welch $p=0.002$) but small, and it comes at 1.6$\times$ the
+shared parameters. MLP-64 and Residual-16 are not significantly better than linear ($p\approx0.05$).
 
-\textbf{Compression does not have to be learned.} A \emph{random} orthonormal 512-d projection performs
-as well as PCA-512: on PersonalLLM it is even slightly better ($93.94$ vs $93.55$, $p=0.04$), and on Reddit the two are
-indistinguishable ($p=0.89$). With 8$\times$ fewer trainable parameters than LoRe it loses only 0.1\pp on
-PersonalLLM ($p=0.67$, not significant), but 2\pp on Reddit ($p=0.009$). The variance structure tells
-the same story: the top-5 principal components explain 66\% of the variance of difference vectors on
-PersonalLLM but only 42\% on Reddit. Real preferences are spread over more directions of the embedding.
+\subsubsection*{On real users they are worse}
+On Reddit every nonlinear basis loses unseen accuracy relative to linear, by 0.9 to 3.1\pp, and MLP-8
+becomes unstable across seeds (unseen SD 3.6\pp, against 0.85 for linear). The training columns of
+\cref{tab:arch} show why. \emph{Every} learned basis, linear included, fits the seen users' training
+pairs to 99--100\% but generalises at only 60--65\%. Capacity is therefore not the bottleneck on
+Reddit; label noise and the small number of pairs per user are, and extra capacity can only be spent
+on memorisation.
 
-\textbf{The pre-trained reward direction is a useful prior.} The anchored basis is the best model for
-seen users on PersonalLLM (96.01\%) and is within noise of the best on unseen users on both benchmarks,
-with fewer shared parameters than LoRe. LoRe initialises $A$ randomly and so discards the one direction
-the reward model was trained to encode. Anchoring keeps that direction for free, and it makes the
-basis interpretable: each user is ``Skywork plus a personal correction''.
+\subsubsection*{Compression helps little, and it does not need to be learned}
+A \emph{random} 512-d projection is as good as PCA-512: slightly better on PersonalLLM ($93.94$ vs
+$93.55$, $p=0.04$) and indistinguishable on Reddit ($p=0.89$). With 8$\times$ fewer trainable parameters
+than LoRe, it loses only 0.1\pp on PersonalLLM (not significant, $p=0.67$) but 2\pp on Reddit
+($p=0.009$). The variance structure agrees: the top five principal components explain 66\% of the
+variance of difference vectors on PersonalLLM but only 42\% on Reddit, so real preferences are spread
+over more directions of the embedding.
 
-\subsection{Pitfall 1: an orientation shortcut produced 100\% accuracy}
+\subsubsection*{Fixed bases underperform, as expected}
+PCA-5, which has no learned basis, gets 82.7\% on PersonalLLM, barely above the frozen Skywork reward.
+On Reddit it scores 47.8\%, which is \emph{below chance}; \cref{sec:simplex} investigates why.
+
+\subsubsection*{The pre-trained reward direction is a useful prior}
+The anchored basis is the best model for seen users on PersonalLLM (96.01\%), and it is within noise of
+the best on unseen users on both benchmarks, with fewer shared parameters than LoRe (16.4k vs 20.5k).
+LoRe initialises $A$ randomly and so discards the one direction the reward model was trained to
+encode. Anchoring keeps that direction for free, and it makes the basis interpretable: each user is
+``Skywork plus a personal correction''.
+
+\subsection{An unexpected 100\% accuracy: the orientation shortcut}
 \label{sec:shortcut}
 
-Our first implementation of MLP-8, MLP-64 and Residual-16 used ordinary networks (with biases)
-applied to $\Delta$. Every one of them reached \textbf{100.00\%} seen \emph{and} unseen accuracy on
-both benchmarks, with zero training loss and zero variance across users. That would have been a
-spectacular result, but it was a bug in the model class, not in the code.
+Our first implementation of MLP-8, MLP-64 and Residual-16 used ordinary two-layer networks, with bias
+terms, applied directly to the cached difference vectors $\Delta$. All three reached \textbf{100.00\%}
+accuracy on both seen and unseen users, on both benchmarks, with the training loss driven to zero and
+no variation across users. On Reddit, where no linear model we trained exceeded about 66\% because the
+annotator labels are noisy, a perfect score is not plausible. We therefore treated it as a symptom to
+explain, not a result to report.
 
-\begin{proposition}[Orientation shortcut]
-\label{prop:shortcut}
-Suppose every training input is oriented chosen-minus-rejected, so all labels are 1, and the basis
-class $\mathcal{F}$ contains a constant map $f(\Delta)\equiv c$ with $w^\top c>0$ (for example any MLP
-with an output bias). Then $\inf_{f\in\mathcal{F},w}\sum_j\ell(w^\top f(\Delta_j)/\tau)=0$ is approached
-by constant functions. Such functions achieve 100\% accuracy on \emph{any} test set oriented the same
-way, independently of the data. If instead every test pair is also scored in swapped order
-($-\Delta$, label 0), a constant $f$ scores exactly 50\%. For an odd $f$, i.e.\ $f(-\Delta)=-f(\Delta)$,
-the swapped and standard accuracies coincide.
-\end{proposition}
-\begin{proof}
-For $f\equiv tc$ with $t\to\infty$, every margin $t\,w^\top c/\tau\to\infty$ and the loss tends to 0,
-while every positive-oriented test pair is classified correctly. On the swapped copy the margin is
-still $t\,w^\top c>0$, but the correct label is now 0, so exactly half of the symmetrised test set is
-wrong. If $f$ is odd, $w^\top f(-\Delta)=-w^\top f(\Delta)$, so the swapped pair is correct if and only if the original is.
-\end{proof}
+The explanation lies in how the training data is presented. Every pair is stored as
+$\Delta=e(x,y_c)-e(x,y_r)$, chosen minus rejected, so every training label is 1 and the model never
+sees a pair in the opposite orientation. A network with an output bias can represent a constant
+function $f(\Delta)\equiv c$. If $w^\top c>0$, the margin $w^\top f(\Delta)/\tau$ is positive for every
+input, and by scaling $c$ the loss
+\[
+\sum_j \ell\!\left(w^\top f(\Delta_j)/\tau\right)
+\]
+can be driven arbitrarily close to zero without using any information in $\Delta$. Because the test
+pairs are stored in the same orientation, such a function is also ``correct'' on every test pair,
+which is exactly the 100\% we observed. In effect, the networks could learn the answer key (``the first
+response always wins'') instead of the users' preferences.
 
-\begin{remark}
-A bias-free \emph{linear} basis is odd, which is why precomputing $\Delta$ is harmless in LoRe and in
-all of the paper's experiments. It also explains why the paper's ``Example~2'' applies the MLP to each
-embedding separately: $f(e_c)-f(e_r)$ is antisymmetric in the swap automatically. The shortcut appears
-only when a nonlinear map is applied to a precomputed difference, which is a natural optimisation once
-embeddings are cached as differences. We fixed it by antisymmetrising, $f_\text{odd}(\Delta)=\tfrac12(f(\Delta)-f(-\Delta))$.
-This gives a valid (odd) \emph{pairwise} model. It is not a per-response reward model, so it cannot
-guarantee transitive rankings over three or more responses, which is a further argument for staying linear.
-\end{remark}
+This diagnosis suggests a simple sanity check: score every test pair in both orientations. Presenting
+$-\Delta$ describes the same comparison with the two responses swapped, so its correct label is 0 and
+the prediction should flip. A constant-output model predicts ``first wins'' in both orientations, so on
+this symmetrised test set it is right exactly half the time, 50\%. A genuine preference model is
+unaffected, provided it is \emph{odd}, $f(-\Delta)=-f(\Delta)$. Then $w^\top f(-\Delta)=-w^\top f(\Delta)$,
+so the swapped pair is classified correctly exactly when the original is, and the standard and swapped
+accuracies coincide.
 
-\Cref{tab:shortcut} confirms the proposition. On our real data the naive networks hit 100\%. On a
-CPU-only synthetic benchmark with planted rank-4 users (\texttt{scripts/demo\_synthetic.py}), the naive
-MLP again scores 100\% standard but exactly 50\% symmetric accuracy, while the odd MLP and the linear
-basis score identically under both metrics. The same happens when we feed the training scripts
-\emph{pure Gaussian noise} instead of embeddings (\texttt{tests/}). We recommend reporting symmetric
-accuracy by default: it costs one extra forward pass and catches the shortcut immediately.
+The same reasoning explains why LoRe itself never meets the problem. A bias-free linear map is odd,
+$A(-\Delta)=-A\Delta$, so precomputing differences is harmless for the paper's linear basis. It also
+explains why the paper's ``Example~2'' applies the MLP to each embedding separately: the margin
+$f(e_c)-f(e_r)$ changes sign automatically when the responses are swapped. The shortcut appears only
+when a nonlinear map is applied to a precomputed difference, which is a natural optimisation once
+embeddings are cached in that form.
 
-\begin{table}[t]
-\centering\small
-\caption{The orientation shortcut. Standard vs symmetric (swapped-pair) accuracy, \%. Real data: our
-first, non-odd implementation. Synthetic: planted rank-4 users, $D=128$, mean of 5 seeds.}
-\label{tab:shortcut}
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{@{}llcccc@{}}
-\toprule
-Data & Basis & Seen std. & Seen sym. & Unseen std. & Unseen sym.\\
-\midrule
-PersonalLLM / Reddit & naive MLP-8, MLP-64, Residual-16 & 100.00 & -- & 100.00 & -- \\
-\midrule
-\multirow{3}{*}{Synthetic} & naive MLP-8 (not odd) & 100.00 & \textbf{50.00} & 100.00 & \textbf{50.00}\\
- & odd MLP-8 & 87.67 & 87.67 & 82.89 & 82.89\\
- & linear (LoRe) & 88.71 & 88.71 & 83.36 & 83.36\\
-\bottomrule
-\end{tabular}}
-\end{table}
+Our correction was to antisymmetrise each nonlinear basis,
+\[
+f_\text{odd}(\Delta)=\tfrac12\big(f(\Delta)-f(-\Delta)\big),
+\]
+which is odd by construction. A constant component now cancels exactly, $\tfrac12(c-c)=0$, so the
+shortcut is no longer available, and the accuracies returned to the plausible range reported in
+\cref{tab:arch}. All nonlinear results in this report use this form. The antisymmetrised network is a
+valid \emph{pairwise} model, but it is not a per-response reward model, so it cannot guarantee
+transitive rankings over three or more responses; this is a further argument for the linear basis.
+More generally, we recommend reporting swapped-pair accuracy alongside standard accuracy whenever a
+nonlinear model is trained on difference vectors. It costs one extra forward pass and exposes this
+failure immediately.
 
-\subsection{Pitfall 2: a fixed basis plus simplex weights can fall below chance}
+\subsection{A below-chance basis: PCA-5 on Reddit}
 \label{sec:simplex}
 
-PCA-5 has no trainable basis. It reaches 82.7\% on PersonalLLM (above the frozen reference), but only
-\textbf{47.8\%} on Reddit, which is \emph{below a coin flip}. Its seed SD is $0.00$--$0.03$, so the
-result is not noise. Both facts are explained by the simplex constraint on user weights.
+PCA-5 is the only basis with nothing to learn in the basis itself. Its directions are the top five
+principal components of the seen users' training differences, and only the user weights are fitted.
+On PersonalLLM it reaches 82.7\%, slightly above the frozen Skywork reward. On Reddit, however, it
+scores 47.8\% on unseen users (48.1\% on seen users), below chance. With a seed SD of only 0.00--0.03\pp,
+the shortfall is systematic, not noise.
 
-\begin{proposition}[Simplex weights cannot flip a fixed basis]
-\label{prop:simplex}
-Let the basis be fixed, with rows $p_1,\dots,p_K$, and let $s_w(\Delta)=\sum_k w_k\,p_k^\top\Delta$ with
-$w\in\simplex$. (a)~Any pair with $p_k^\top\Delta<0$ for all $k$ is misclassified for \emph{every} $w$, so
-accuracy is at most $1-\rho$ for every $w$, where $\rho$ is the fraction of such pairs; if $\rho>\tfrac12$ the
-model is below chance whatever the users' weights. (b)~For fixed $p_k$ the objective is convex in $w$ over the simplex,
-so (up to flat directions) every initialisation converges to the same solution.
-\end{proposition}
-\begin{proof}
-(a)~$s_w(\Delta)$ is a convex combination of the numbers $p_k^\top\Delta$, so it is negative whenever all
-of them are; such pairs are lost whatever $w$ is. (b)~$w\mapsto\ell(w^\top z/\tau)$ is a convex function
-composed with a linear map, and a sum of convex functions over a convex set is convex.
-\end{proof}
+A model that falls below chance is consistently ranking the wrong response higher, so we examined what
+this model can and cannot express. With fixed basis directions $p_1,\dots,p_K$, a user's score for a
+pair is
+\[
+s_w(\Delta)=\sum_{k=1}^{K} w_k\,p_k^\top\Delta,\qquad w\in\simplex .
+\]
+Because the weights are non-negative and sum to one, $s_w(\Delta)$ is a convex combination, i.e.\ a
+weighted average, of the $K$ projections $p_k^\top\Delta$. A weighted average of negative numbers is
+negative. On any pair where \emph{every} projection has the wrong sign, the model is therefore wrong
+for every possible choice of $w$, and no amount of fitting the user's weights can repair it. If a
+fraction $\rho$ of pairs are of this kind, accuracy is at most $1-\rho$ whatever the user's weights,
+and once $\rho>\tfrac12$ the model is necessarily below chance.
 
-PCA directions are defined only up to sign ($v$ and $-v$ are equally valid eigenvectors), so a fixed
-PCA basis has an arbitrary orientation relative to the users. With simplex weights, a user can
-down-weight a wrong-signed direction but can never \emph{negate} it. A learned basis avoids the problem
-because $A$ absorbs the signs. A fixed basis needs either unconstrained $w\in\R^K$ or a sign-symmetric
-basis $\{\pm p_k\}$. We regard this as a real modelling caveat for anyone who reuses LoRe weights on
-top of a fixed or externally given set of reward functions, as in the multi-objective decoding
-setting the paper advertises in its Section~3.4. There the basis rewards are given, and the simplex
-constraint restricts users to convex combinations of them.
+Why would a PCA basis produce many such pairs? Principal components are defined only up to sign: $v$
+and $-v$ are equally valid eigenvectors, and which one the solver returns bears no relation to which
+direction users prefer. A learned basis is unaffected, because training can flip any direction of $A$.
+Simplex weights cannot: a user can down-weight a wrong-signed direction, but can never \emph{negate}
+it. On PersonalLLM the top five components explain 66\% of the variance and this evidently costs
+little. On Reddit they explain only 42\% and the preference signal is weak, so a basis whose
+components happen to point mostly against users' preferences would produce exactly the behaviour we
+see. We did not measure $\rho$ directly, so we present this as the most plausible mechanism, not an
+established cause. The near-zero seed variance fits the same picture. With the basis fixed, the
+objective is convex in $w$, and every seed converged to essentially the same accuracy.
+
+The practical implication is that a fixed or externally supplied basis should not be combined with
+simplex weights as-is. It needs either unconstrained weights $w\in\R^K$ or a sign-symmetric basis
+$\{\pm p_k\}$ that lets a user express both orientations of every direction.
 
 % ======================================================================
-\section{Experiment 3: how should a new user be initialised?}
+\section{Experiment 2: how should a new user be initialised?}
 \label{sec:init}
 
 \paragraph{Motivation.} LoRe fits a new user from $\theta\sim\mathcal{N}(0,I)$, ignoring the 1{,}000 seen
-users it has just learned. At deployment the per-user step must be cheap, and Experiment~1 showed that
-it overfits with 9 pairs. We therefore ask whether the seen population can supply a better starting
+users it has just learned. At deployment the per-user step must be cheap, and the reproduction showed
+that it overfits with 9 pairs. We therefore ask whether the seen population can supply a better starting
 point, and how much that matters.
 
-\paragraph{Design.} We reuse the five PersonalLLM ($\alpha=0.1$) bases from Experiment~1 and verified that
-re-evaluating their saved weights reproduces the original unseen accuracies to within $10^{-5}$\pp.
+\paragraph{Design.} We reuse the five PersonalLLM ($\alpha=0.1$) bases from the reproduction and verified
+that re-evaluating their saved weights reproduces the original unseen accuracies to within $10^{-5}$\pp.
 For each of the 500 unseen users we build \emph{nested} support sets of $N\in\{5,15,50,150\}$ pairs. The
 original 9 prompts come first and are extended with new prompts; the query set is all 1{,}000 test
 prompts. We compare five starting points:
-\emph{random logits} (LoRe's default); \emph{uniform} $w=\mathbf{1}/K$; \emph{population mean} of the learned
-seen-user weights; \emph{nearest seen user}, i.e.\ the seen user's $w$ with the lowest BT loss on the new
-user's support set; and \emph{cluster centroid}, i.e.\ the best of five $k$-means centroids of seen-user
-weights, also chosen by support loss. The last two use the support data only to \emph{select} among
-existing weight vectors; they do not optimise. We then run 0, 5, 20 or 50 Adam updates (lr 0.1).
+\begin{enumerate}[label=\arabic*.]
+\item \textbf{Random logits}: LoRe's default.
+\item \textbf{Uniform}: $w=\mathbf{1}/K$.
+\item \textbf{Population mean}: the average of the learned seen-user weights.
+\item \textbf{Nearest seen user}: the seen user's $w$ with the lowest BT loss on the new user's support set.
+\item \textbf{Cluster centroid}: the best of five $k$-means centroids of the seen-user weights, also
+chosen by support loss.
+\end{enumerate}
+The last two use the support data only to \emph{select} among existing weight vectors; they do not
+optimise. From each start we run 0, 5, 20 or 50 Adam updates (lr 0.1).
 
-\begin{proposition}[Initialisation only affects the transient]
-\label{prop:convex}
-For a frozen basis, $L(w)=\sum_j\ell(w^\top z_j/\tau)$ is convex on $\simplex$. Under the parameterisation
-$w=\mathrm{softmax}(\theta)$, every stationary point $\theta^\star$ with $w^\star=\mathrm{softmax}(\theta^\star)$
-in the interior of the simplex is a global minimiser of $L$ over $\simplex$.
-\end{proposition}
-\begin{proof}
-$\nabla_\theta L=J(\theta)^\top\nabla_w L$ with $J=\mathrm{diag}(w)-ww^\top$. For $w$ in the interior,
-the kernel of $J$ is $\mathrm{span}(\mathbf{1})$. Hence $\nabla_\theta L=0$ implies $\nabla_w L=\lambda\mathbf{1}$,
-which is exactly the KKT condition for minimising a convex function over the simplex with no active
-inequality constraints. KKT points of convex problems are global minima.
-\end{proof}
-
-The proposition predicts that all strategies converge to the same accuracy given enough updates.
-Initialisation can then only change how fast they get there, and what the model predicts if the
-adaptation is stopped early.
+\paragraph{What we expect.} We try different initialisations to see whether a new user can be fitted
+with fewer support examples, and how quickly (in gradient steps) the fit adapts. The selected starts,
+nearest seen user and cluster centroid, should be strong starting points, since a new user is likely to
+resemble someone already in the population. The population mean averages over users who disagree, and
+a random start carries no information at all. With a sufficient number of support examples and
+sufficient gradient steps, however, we expect all initialisations to perform similarly. With the basis
+frozen, the few-shot objective is convex in $w$, so the starting point should mainly affect how quickly
+the optimiser approaches a good solution, not where it ends up. The open questions are how large the
+early advantage is, how long it lasts, and whether a good start still helps when support examples are scarce.
 
 \begin{figure}[t]
 \centering
@@ -563,15 +552,16 @@ Cluster centroid & 150 & $+5.10$ {\scriptsize[4.43, 5.76]} & $+3.09$ {\scriptsiz
 \end{tabular}
 \end{table}
 
-\paragraph{Results.} \Cref{fig:init,tab:init} show the following.
+\paragraph{Results.} \Cref{fig:init,tab:init} confirm the main expectations: selected starts are much
+better at first, and with enough data everything converges later.
 \begin{itemize}
 \item \textbf{Large gains at small budgets.} With no gradient steps at all, selecting a seen user or a
 centroid by support loss improves query accuracy over LoRe's start by $+4.5$ to $+5.8$\pp. After 5
 updates the gain is still $+2.4$ to $+3.2$\pp, with all five seeds positive in every setting.
-\item \textbf{Convergence, as predicted.} By 50 updates the five strategies differ by at most 0.07\pp for
+\item \textbf{Convergence with enough data.} By 50 updates the five strategies differ by at most 0.07\pp for
 $N\ge50$, against gaps of up to 5.8\pp at the start. With smaller supports the remaining spread is 0.4\pp ($N=15$)
-and 0.9\pp ($N=5$), because there the selected starts overfit (next point). This is the convexity of \cref{prop:convex} seen
-empirically: initialisation buys speed, not a better optimum.
+and 0.9\pp ($N=5$), because there the selected starts overfit (next point). This is consistent with the convexity of the
+few-shot objective: here, initialisation buys speed, not a better optimum.
 \item \textbf{A lookup can replace the optimisation.} \Cref{fig:zero} compares zero-update selection with
 fully adapted baselines. For $N\ge50$ the nearest seen user with \emph{no} updates is within 0.08\pp of
 50 steps of LoRe's adaptation (95.59 vs 95.67 at $N=50$; 95.92 vs 95.98 at $N=150$). At $N=5$ the
@@ -587,8 +577,12 @@ prior, would be the principled fix.
 \item \textbf{The population mean is a poor prior.} It is worse than uniform after 5 updates by 1.0
 to 1.3\pp, because the mean of a diverse ($\alpha=0.1$) population sits between clusters and
 represents nobody. Personalisation needs selection, not averaging.
-\item \textbf{LoRe's default is the worst start.} Random logits start 1.7\pp below uniform. A start
-that is not centred adds nothing except variance.
+\item \textbf{No long-run benefit when examples are scarce.} We had hoped that the population-informed
+starts would also yield a better \emph{final} model when support examples are few, with the selected
+weights acting as a prior that gradient updates refine. We did not see this. At $N=5$ and $N=15$, after
+50 updates the nearest-seen-user and cluster-centroid starts are no better than the random or uniform
+starts (at $N=15$: $-0.22$ and $-0.12$\pp relative to random logits; at $N=5$: 94.02\% for the cluster
+centroid against 94.21\% for random logits). Their advantage is confined to the first few updates.
 \end{itemize}
 
 \begin{figure}[t]
@@ -611,36 +605,28 @@ model, the three components play very different roles:
 accuracy on real users, richer ones only memorise, and the most useful change is to keep the
 pre-trained reward direction;
 (2)~the \textbf{simplex constraint} is harmless when the basis is learned, but it becomes a real
-restriction for a fixed basis (\cref{prop:simplex});
-(3)~the \textbf{few-shot optimisation} is the least essential component. Its outcome is fixed by
-convexity, and choosing among the seen users' weights gets there with no optimisation at all.
+restriction for a fixed basis (\cref{sec:simplex});
+(3)~the \textbf{few-shot optimisation} is the least essential component. Given enough data and updates, its outcome
+does not depend on the starting point, and choosing among the seen users' weights gets there with no
+optimisation at all.
 
 \paragraph{Critique of the paper.}
 \begin{itemize}
 \item \textbf{The semi-synthetic benchmark matches LoRe's own model class.} PersonalLLM users are exact
 linear mixtures of ten reward models, and those models are close to linear in a strong reward model's
 embedding. LoRe's large margin there (Table~1 of the paper) therefore says more about matched
-inductive bias than about personalising real users. On Reddit, the only real-user benchmark we could
-reproduce, our numbers put LoRe just 1--3.5\pp above the frozen reference.
+inductive bias than about personalising real users.
 \item \textbf{The design choices are not ablated}, and two training details that matter are not stated:
 the temperature $\tau=100$ and the learning rate of 0.5. The rank $B$ is chosen by cross-validation
 over a wide grid, which slightly flatters LoRe relative to baselines run with default settings.
 \item \textbf{Statistical resolution.} With 20 users per group and per-user SDs of 3--10\pp, many of the
 roughly 1\pp differences in the paper's Reddit table are not resolvable. The unseen-above-seen pattern
 on PersonalLLM did not replicate in our runs.
-\item \textbf{The multi-objective decoding story} relies on combining fixed, externally trained reward
-functions with simplex weights. That is exactly the regime where \cref{prop:simplex} bites.
 \end{itemize}
-
-\paragraph{What we would do next.} (i)~Combine the two positive findings: an anchored basis with
-population-selected initialisation and early stopping. (ii)~Repeat Experiment~3 on Reddit and PRISM,
-where users are real and support sets are tiny (PRISM averages 3.9 pairs per user). (iii)~Use the
-seen-user candidates for \emph{active} querying, choosing which pairs to ask a new user so as to best
-discriminate between candidates. This connects to the online extension the paper lists as future work.
 
 \section{Limitations}
 We used five seeds instead of twenty and $K=5$ throughout instead of a cross-validated rank. Reddit
-was evaluated on a 300-pair-per-worker subsample, and PRISM was not reproduced. Experiment~3 uses only
+was evaluated on a 300-pair-per-worker subsample, and PRISM was not reproduced. Experiment~2 uses only
 PersonalLLM at $\alpha=0.1$, where seen-user clusters are well defined because the users are synthetic.
 On real users the benefit of selection may be smaller. Seed SDs for the $N=5$ and $N=15$ conditions were
 not recorded per method, so for those we report paired intervals only where available. The embedding
@@ -651,17 +637,15 @@ Example~3).
 We reproduced LoRe and then took it apart. Its accuracy rests on a shared low-rank structure over a
 strong frozen representation. A plain linear basis already captures what that representation offers:
 nonlinear bases add at most 0.6\pp on synthetic users and nothing on real ones. Along the way we found
-and explained two pitfalls. Nonlinear bases on precomputed differences admit a 100\%-accuracy shortcut
-unless they are odd. A fixed basis with simplex weights can be pushed below chance. Finally, because
-the few-shot problem is convex, a new user's initialisation only matters before convergence; before
-convergence, however, it matters a great deal. Picking the best-fitting seen user is as good as
-LoRe's 50-step adaptation and needs no gradient steps.
+and explained a pitfall: nonlinear bases on precomputed differences admit a 100\%-accuracy shortcut
+unless they are odd. Finally, a new user's initialisation mattered mainly before convergence; before convergence, however, it matters a great deal. Picking the
+best-fitting seen user is as good as LoRe's 50-step adaptation and needs no gradient steps.
 
-\paragraph{Reproducibility and use of AI tools.} All experiments were run by us on Google Colab
-(A100). Code, per-seed results (CSV), figure scripts, unit tests and a CPU-only synthetic demo are at
-\url{\repourl}; every number in this report is in \texttt{results/}. We used an AI assistant (Claude)
-to help refactor our notebooks into the repository, to draft and edit the text of this report, and to
-brainstorm ablations. All numbers were checked against our notebook outputs.
+\paragraph{Code and results.} All experiments were run on Google Colab (A100). Code, per-seed results
+and figure scripts are at \url{\repourl}; every number in this report is in \texttt{results/}.
+
+\paragraph{Use of AI tools.} We have used AI to write code for the experiments, but we came up with the
+ideas. We have also used AI to structure the report and correct and polish sentences.
 
 % ======================================================================
 \begin{thebibliography}{99}\small
@@ -681,7 +665,7 @@ brainstorm ablations. All numbers were checked against our notebook outputs.
 % ======================================================================
 \clearpage
 \appendix
-\section{Hyperparameters and per-seed results}
+\section{Training configuration and reproduction per seed}
 \label{app:details}
 
 \begin{table}[ht]
@@ -694,8 +678,8 @@ Embedding model & Skywork-Reward-Llama-3.1-8B-v0.2, rev.\ \texttt{67e958f}, fina
 Basis rank $K$ & 5 (anchor basis: 1 fixed + 4 learned)\\
 User weights & $w=\mathrm{softmax}(\theta)$, $\theta_0\sim\mathcal{N}(0,I)$\\
 Temperature $\tau$ & 100\\
-Joint stage & full-batch Adam, lr 0.5; 2{,}000 steps (Exp.~1 PersonalLLM), 1{,}000 (Reddit, Exp.~2)\\
-Few-shot stage & full-batch Adam, lr 0.1; 1{,}000 steps (Exp.~1 PersonalLLM), 500 (Reddit, Exp.~2), $\le$50 (Exp.~3)\\
+Joint stage & full-batch Adam, lr 0.5; 2{,}000 steps (reproduction, PersonalLLM), 1{,}000 (Reddit, Exp.~1)\\
+Few-shot stage & full-batch Adam, lr 0.1; 1{,}000 steps (reproduction, PersonalLLM), 500 (Reddit, Exp.~1), $\le$50 (Exp.~2)\\
 Loss & sum over users of per-user mean logistic loss\\
 Projections & PCA (randomised SVD, seen-user training $\Delta$ only); random: QR of Gaussian, seed 42\\
 Seeds & 42, 43, 44, 45, 46\\
@@ -721,5 +705,105 @@ Seed & seen & unseen & seen & unseen && seen & unseen & seen & unseen\\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\clearpage
+
+\section{Experiment 1: per-seed results and parameter accounting}
+\label{app:arch}
+\Cref{tab:arch-seeds} shows that the large Reddit SD of MLP-8 comes from a single seed (seed 45, 56.0\%),
+while the linear basis stays between 64.0 and 66.1\% on every seed. \Cref{tab:params} lists the parameter
+counts behind \cref{fig:arch}.
+
+\begin{table}[ht]
+\centering\small
+\caption{Experiment 1, per-seed unseen-user accuracy (\%). Per-seed values for the anchored basis were not
+logged individually; its mean $\pm$ SD is in \cref{tab:arch}.}
+\label{tab:arch-seeds}
+\begin{tabular}{@{}l ccccc c ccccc@{}}
+\toprule
+& \multicolumn{5}{c}{PersonalLLM ($\alpha=0.1$), seed} && \multicolumn{5}{c}{Reddit TL;DR ($n=150$), seed}\\
+\cmidrule{2-6}\cmidrule{8-12}
+Basis & 42 & 43 & 44 & 45 & 46 && 42 & 43 & 44 & 45 & 46\\
+\midrule
+PCA-5 & 82.66 & 82.65 & 82.66 & 82.65 & 82.65 &  & 47.73 & 47.75 & 47.75 & 47.80 & 47.75\\
+PCA-512 + linear & 93.82 & 93.42 & 93.54 & 93.40 & 93.55 &  & 63.60 & 61.98 & 62.52 & 63.15 & 65.06\\
+Random-512 + linear & 94.17 & 93.62 & 93.72 & 93.89 & 94.32 &  & 63.17 & 63.82 & 64.75 & 62.29 & 62.77\\
+Linear (LoRe) & 93.64 & 94.06 & 94.21 & 93.97 & 94.22 &  & 64.89 & 65.69 & 65.93 & 66.10 & 64.04\\
+MLP-8 (odd) & 94.37 & 94.77 & 94.57 & 94.77 & 94.68 &  & 64.09 & 63.28 & 65.08 & 55.99 & 62.83\\
+MLP-64 (odd) & 94.38 & 94.77 & 94.53 & 93.92 & 95.03 &  & 66.31 & 63.36 & 64.22 & 63.06 & 61.22\\
+Residual-16 (odd) & 94.28 & 94.03 & 94.88 & 94.50 & 94.44 &  & 64.11 & 64.18 & 63.44 & 65.30 & 65.14\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]
+\centering\small
+\caption{Experiment 1, parameter accounting. \emph{Shared}: trainable basis parameters. \emph{Total
+trainable}: shared plus user weights (1{,}500 users on PersonalLLM, 39 on Reddit). \emph{Deployed}: everything
+stored at inference, including frozen projections and the anchor.}
+\label{tab:params}
+\begin{tabular}{@{}l r rr c rr@{}}
+\toprule
+& & \multicolumn{2}{c}{PersonalLLM} && \multicolumn{2}{c}{Reddit TL;DR}\\
+\cmidrule{3-4}\cmidrule{6-7}
+Basis & Shared & Total trainable & Deployed && Total trainable & Deployed\\
+\midrule
+Frozen Skywork & 0 & 0 & 4{,}096 && 0 & 4{,}096\\
+PCA-5 & 0 & 7{,}500 & 27{,}980 && 195 & 20{,}675\\
+PCA-512 + linear & 2{,}560 & 10{,}060 & 2{,}107{,}212 && 2{,}755 & 2{,}099{,}907\\
+Random-512 + linear & 2{,}560 & 10{,}060 & 2{,}107{,}212 && 2{,}755 & 2{,}099{,}907\\
+Linear (LoRe) & 20{,}480 & 27{,}980 & 27{,}980 && 20{,}675 & 20{,}675\\
+Anchor + 4 residual & 16{,}384 & 22{,}384 & 26{,}480 && 16{,}540 & 20{,}636\\
+MLP-8 (odd) & 32{,}821 & 40{,}321 & 40{,}321 && 33{,}016 & 33{,}016\\
+MLP-64 (odd) & 262{,}533 & 270{,}033 & 270{,}033 && 262{,}728 & 262{,}728\\
+Residual-16 (odd) & 86{,}096 & 93{,}596 & 93{,}596 && 86{,}291 & 86{,}291\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Experiment 2: absolute accuracies}
+\label{app:init}
+\Cref{tab:init} in the main text reports paired improvements over random logits; \cref{tab:init-abs} gives
+the underlying absolute accuracies for every condition, including $N=5$.
+
+\begin{table}[ht]
+\centering\small
+\caption{Experiment 2, absolute query accuracy of unseen users (\%, mean over 5 seeds) for every support
+size $N$, initialisation and number of updates. Best value per column within each $N$ in bold.
+$^\dagger$Derived from the paired-difference table (uniform minus its improvement over random logits).}
+\label{tab:init-abs}
+\begin{tabular}{@{}ll cccc@{}}
+\toprule
+& & \multicolumn{4}{c}{Gradient updates}\\
+\cmidrule{3-6}
+$N$ & Initialisation & 0 & 5 & 20 & 50\\
+\midrule
+\multirow{5}{*}{5} & Random logits (LoRe) & 90.13 & 92.08 & 93.80 & 94.21\\
+ & Uniform & 91.80 & 93.11 & \textbf{94.44} & 94.42\\
+ & Population mean & 91.60 & 92.07 & 94.27 & \textbf{94.59}\\
+ & Nearest seen user & 93.75 & 93.73 & 93.71 & 93.71\\
+ & Cluster centroid & \textbf{94.07} & \textbf{94.21} & 94.10 & 94.02\\
+\midrule
+\multirow{5}{*}{15} & Random logits (LoRe) & 90.13 & 92.41 & 94.49 & 95.00\\
+ & Uniform & 91.80 & 93.35 & \textbf{95.04} & 95.10\\
+ & Population mean & 91.60 & 92.22 & 94.69 & \textbf{95.16}\\
+ & Nearest seen user & \textbf{94.80} & 94.79 & 94.77 & 94.78\\
+ & Cluster centroid & 94.66 & \textbf{95.00} & 94.97 & 94.88\\
+\midrule
+\multirow{5}{*}{50} & Random logits (LoRe)$^\dagger$ & 90.13 & 92.65 & 95.07 & 95.67\\
+ & Uniform & 91.80 & 93.53 & 95.59 & \textbf{95.69}\\
+ & Population mean & 91.60 & 92.30 & 94.97 & 95.68\\
+ & Nearest seen user & \textbf{95.59} & 95.61 & 95.60 & 95.62\\
+ & Cluster centroid & 95.08 & \textbf{95.61} & \textbf{95.66} & 95.65\\
+\midrule
+\multirow{5}{*}{150} & Random logits (LoRe)$^\dagger$ & 90.13 & 92.76 & 95.33 & 95.98\\
+ & Uniform & 91.80 & 93.64 & 95.85 & \textbf{95.99}\\
+ & Population mean & 91.60 & 92.34 & 95.12 & 95.96\\
+ & Nearest seen user & \textbf{95.92} & \textbf{95.92} & 95.93 & 95.96\\
+ & Cluster centroid & 95.23 & 95.85 & \textbf{95.94} & \textbf{95.99}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
 
 \end{document}

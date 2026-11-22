@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Experiment 2: change the representation / function class of the reward basis.
+"""Experiment 1: change the representation / function class of the reward basis.
 
 Every architecture is trained with the *same* LoRe recipe (K=5, full-batch Adam,
 lr 0.5 joint for 1000 steps, lr 0.1 few-shot for 500 steps, tau=100) on the same
