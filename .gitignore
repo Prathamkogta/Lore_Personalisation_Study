@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+data/
+*_rerun.csv
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+.DS_Store

@@ -1,0 +1,7 @@
+support_size,baseline,baseline_updates,centroid0_acc,baseline_acc,diff_pp,ci95_lower,ci95_upper,centroid_wins_of_5
+5,random_logits,5,94.071,92.085,1.986,1.517,2.454,5
+5,random_logits,20,94.071,93.8,0.271,-0.256,0.798,4
+5,random_logits,50,94.071,94.212,-0.141,-0.669,0.387,2
+5,uniform,5,94.071,93.105,0.966,0.628,1.304,5
+5,uniform,20,94.071,94.445,-0.374,-1.004,0.256,0
+5,uniform,50,94.071,94.42,-0.349,-0.987,0.29,1

@@ -1,0 +1,19 @@
+benchmark,architecture,seen_eval_mean,seen_eval_seed_sd,unseen_eval_mean,unseen_eval_seed_sd,trainable_shared,total_deployed_params,total_trainable
+PersonalLLM,Skywork reference,83.33,,80.82,,0,4096,0
+PersonalLLM,PCA-5,84.96,0.0,82.65,0.0,0,27980,7500
+PersonalLLM,PCA-512 + Linear,95.06,0.1,93.55,0.17,2560,2107212,10060
+PersonalLLM,Random-512 + Linear,95.64,0.08,93.94,0.3,2560,2107212,10060
+PersonalLLM,Original Linear,95.87,0.21,94.02,0.24,20480,27980,27980
+PersonalLLM,MLP-8 (odd),95.8,0.17,94.63,0.17,32821,40321,40321
+PersonalLLM,MLP-64 (odd),95.44,0.33,94.52,0.42,262533,270033,270033
+PersonalLLM,Residual-16 (odd),95.58,0.17,94.43,0.31,86096,93596,93596
+PersonalLLM,Fixed-Anchor-Residual,96.01,0.11,94.58,0.15,16384,26480,22384
+RedditTLDR,Skywork reference,63.1,,61.87,,0,4096,0
+RedditTLDR,PCA-5,48.14,0.03,47.75,0.03,0,20675,195
+RedditTLDR,PCA-512 + Linear,60.41,1.08,63.26,1.18,2560,2099907,2755
+RedditTLDR,Random-512 + Linear,60.8,0.29,63.36,0.96,2560,2099907,2755
+RedditTLDR,Original Linear,64.19,0.45,65.33,0.85,20480,20675,20675
+RedditTLDR,MLP-8 (odd),64.66,0.62,62.26,3.61,32821,33016,33016
+RedditTLDR,MLP-64 (odd),64.27,0.43,63.64,1.85,262533,262728,262728
+RedditTLDR,Residual-16 (odd),64.36,1.01,64.43,0.78,86096,86291,86291
+RedditTLDR,Fixed-Anchor-Residual,64.31,0.84,64.93,0.69,16384,20636,16540

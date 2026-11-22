@@ -1,0 +1,101 @@
+benchmark,architecture,seed,seen_train,seen_eval,unseen_fewshot,unseen_eval
+PersonalLLM,"MLP-64 (naive, first pass)",42,100.0,100.0,100.0,100.0
+PersonalLLM,"MLP-64 (naive, first pass)",43,100.0,100.0,100.0,100.0
+PersonalLLM,"MLP-64 (naive, first pass)",44,100.0,100.0,100.0,100.0
+PersonalLLM,"MLP-64 (naive, first pass)",45,100.0,100.0,100.0,100.0
+PersonalLLM,"MLP-64 (naive, first pass)",46,100.0,100.0,100.0,100.0
+PersonalLLM,MLP-64 (odd),42,99.66,95.35,97.78,94.38
+PersonalLLM,MLP-64 (odd),43,97.11,95.52,96.69,94.77
+PersonalLLM,MLP-64 (odd),44,99.39,95.28,97.91,94.53
+PersonalLLM,MLP-64 (odd),45,99.8,95.09,97.98,93.92
+PersonalLLM,MLP-64 (odd),46,98.76,95.96,98.09,95.03
+PersonalLLM,"MLP-8 (naive, first pass)",42,100.0,100.0,100.0,100.0
+PersonalLLM,"MLP-8 (naive, first pass)",43,100.0,100.0,100.0,100.0
+PersonalLLM,"MLP-8 (naive, first pass)",44,100.0,100.0,100.0,100.0
+PersonalLLM,"MLP-8 (naive, first pass)",45,100.0,100.0,100.0,100.0
+PersonalLLM,"MLP-8 (naive, first pass)",46,100.0,100.0,100.0,100.0
+PersonalLLM,MLP-8 (odd),42,99.99,95.64,98.38,94.37
+PersonalLLM,MLP-8 (odd),43,99.99,95.65,98.47,94.77
+PersonalLLM,MLP-8 (odd),44,99.99,95.78,98.58,94.57
+PersonalLLM,MLP-8 (odd),45,99.99,95.9,98.69,94.77
+PersonalLLM,MLP-8 (odd),46,99.99,96.05,98.42,94.68
+PersonalLLM,Original Linear,42,99.28,95.55,98.82,93.64
+PersonalLLM,Original Linear,43,99.5,96.09,98.76,94.06
+PersonalLLM,Original Linear,44,99.26,95.96,98.8,94.21
+PersonalLLM,Original Linear,45,99.57,95.78,98.73,93.97
+PersonalLLM,Original Linear,46,99.3,96.0,98.87,94.22
+PersonalLLM,PCA-5,42,85.67,84.96,85.69,82.66
+PersonalLLM,PCA-5,43,85.67,84.96,85.71,82.65
+PersonalLLM,PCA-5,44,85.67,84.96,85.71,82.66
+PersonalLLM,PCA-5,45,85.67,84.96,85.69,82.65
+PersonalLLM,PCA-5,46,85.67,84.96,85.71,82.65
+PersonalLLM,PCA-512 + Linear,42,99.44,95.0,98.98,93.82
+PersonalLLM,PCA-512 + Linear,43,99.31,95.16,98.82,93.42
+PersonalLLM,PCA-512 + Linear,44,99.27,94.98,98.87,93.54
+PersonalLLM,PCA-512 + Linear,45,99.17,95.19,98.84,93.4
+PersonalLLM,PCA-512 + Linear,46,99.13,94.99,98.67,93.55
+PersonalLLM,Random-512 + Linear,42,97.69,95.64,98.13,94.17
+PersonalLLM,Random-512 + Linear,43,97.56,95.73,98.07,93.62
+PersonalLLM,Random-512 + Linear,44,97.63,95.71,98.0,93.72
+PersonalLLM,Random-512 + Linear,45,97.6,95.57,97.89,93.89
+PersonalLLM,Random-512 + Linear,46,97.76,95.57,98.04,94.32
+PersonalLLM,"Residual-16 (naive, first pass)",42,99.99,100.0,100.0,100.0
+PersonalLLM,"Residual-16 (naive, first pass)",43,99.99,100.0,100.0,100.0
+PersonalLLM,"Residual-16 (naive, first pass)",44,99.99,100.0,100.0,100.0
+PersonalLLM,"Residual-16 (naive, first pass)",45,99.99,100.0,100.0,100.0
+PersonalLLM,"Residual-16 (naive, first pass)",46,99.99,100.0,100.0,100.0
+PersonalLLM,Residual-16 (odd),42,99.95,95.29,98.07,94.28
+PersonalLLM,Residual-16 (odd),43,99.99,95.58,98.58,94.03
+PersonalLLM,Residual-16 (odd),44,99.99,95.65,98.84,94.88
+PersonalLLM,Residual-16 (odd),45,99.99,95.68,98.56,94.5
+PersonalLLM,Residual-16 (odd),46,99.99,95.7,98.82,94.44
+RedditTLDR,"MLP-64 (naive, first pass)",42,100.0,100.0,100.0,100.0
+RedditTLDR,"MLP-64 (naive, first pass)",43,100.0,100.0,100.0,100.0
+RedditTLDR,"MLP-64 (naive, first pass)",44,100.0,100.0,100.0,100.0
+RedditTLDR,"MLP-64 (naive, first pass)",45,100.0,100.0,100.0,100.0
+RedditTLDR,"MLP-64 (naive, first pass)",46,100.0,100.0,100.0,100.0
+RedditTLDR,MLP-64 (odd),42,100.0,64.9,70.74,66.31
+RedditTLDR,MLP-64 (odd),43,100.0,64.54,69.47,63.36
+RedditTLDR,MLP-64 (odd),44,100.0,63.91,69.68,64.22
+RedditTLDR,MLP-64 (odd),45,99.97,64.01,68.84,63.06
+RedditTLDR,MLP-64 (odd),46,100.0,63.98,68.53,61.22
+RedditTLDR,"MLP-8 (naive, first pass)",42,100.0,100.0,100.0,100.0
+RedditTLDR,"MLP-8 (naive, first pass)",43,100.0,100.0,100.0,100.0
+RedditTLDR,"MLP-8 (naive, first pass)",44,100.0,100.0,100.0,100.0
+RedditTLDR,"MLP-8 (naive, first pass)",45,100.0,100.0,100.0,100.0
+RedditTLDR,"MLP-8 (naive, first pass)",46,100.0,100.0,100.0,100.0
+RedditTLDR,MLP-8 (odd),42,99.93,64.88,71.16,64.09
+RedditTLDR,MLP-8 (odd),43,100.0,64.18,67.37,63.28
+RedditTLDR,MLP-8 (odd),44,99.93,65.62,70.63,65.08
+RedditTLDR,MLP-8 (odd),45,100.0,64.13,61.89,55.99
+RedditTLDR,MLP-8 (odd),46,100.0,64.5,68.74,62.83
+RedditTLDR,Original Linear,42,99.73,64.32,72.42,64.89
+RedditTLDR,Original Linear,43,99.5,63.73,74.11,65.69
+RedditTLDR,Original Linear,44,99.77,63.83,72.42,65.93
+RedditTLDR,Original Linear,45,99.7,64.21,73.16,66.1
+RedditTLDR,Original Linear,46,99.87,64.85,71.68,64.04
+RedditTLDR,PCA-5,42,51.74,48.15,56.21,47.73
+RedditTLDR,PCA-5,43,51.74,48.08,56.21,47.75
+RedditTLDR,PCA-5,44,51.74,48.15,56.21,47.75
+RedditTLDR,PCA-5,45,51.74,48.15,56.21,47.8
+RedditTLDR,PCA-5,46,51.74,48.15,56.21,47.75
+RedditTLDR,PCA-512 + Linear,42,99.4,61.87,70.32,63.6
+RedditTLDR,PCA-512 + Linear,43,99.63,58.94,67.89,61.98
+RedditTLDR,PCA-512 + Linear,44,99.4,60.05,69.58,62.52
+RedditTLDR,PCA-512 + Linear,45,99.31,60.28,70.95,63.15
+RedditTLDR,PCA-512 + Linear,46,99.37,60.88,71.26,65.06
+RedditTLDR,Random-512 + Linear,42,99.61,61.16,72.21,63.17
+RedditTLDR,Random-512 + Linear,43,99.39,60.66,69.68,63.82
+RedditTLDR,Random-512 + Linear,44,99.1,61.0,72.63,64.75
+RedditTLDR,Random-512 + Linear,45,97.7,60.42,72.95,62.29
+RedditTLDR,Random-512 + Linear,46,98.04,60.73,71.16,62.77
+RedditTLDR,"Residual-16 (naive, first pass)",42,100.0,100.0,100.0,100.0
+RedditTLDR,"Residual-16 (naive, first pass)",43,100.0,100.0,100.0,100.0
+RedditTLDR,"Residual-16 (naive, first pass)",44,100.0,100.0,100.0,100.0
+RedditTLDR,"Residual-16 (naive, first pass)",45,100.0,100.0,100.0,100.0
+RedditTLDR,"Residual-16 (naive, first pass)",46,100.0,100.0,100.0,100.0
+RedditTLDR,Residual-16 (odd),42,99.97,63.66,72.0,64.11
+RedditTLDR,Residual-16 (odd),43,99.97,64.67,70.42,64.18
+RedditTLDR,Residual-16 (odd),44,99.93,64.08,70.0,63.44
+RedditTLDR,Residual-16 (odd),45,99.97,63.43,69.47,65.3
+RedditTLDR,Residual-16 (odd),46,99.97,65.95,69.37,65.14

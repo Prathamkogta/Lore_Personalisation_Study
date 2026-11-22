@@ -1,0 +1,3 @@
+benchmark,architecture,seen_eval,unseen_eval
+PersonalLLM,MLP-8 / MLP-64 / Residual-16 (naive),100.0,100.0
+RedditTLDR,MLP-8 / MLP-64 / Residual-16 (naive),100.0,100.0
